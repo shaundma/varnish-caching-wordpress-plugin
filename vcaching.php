@@ -1084,6 +1084,10 @@ class VCaching {
         add_settings_field($this->prefix . "varnish_version", __("Version", $this->plugin), array($this, $this->prefix . "varnish_version"), $this->prefix . 'download', "download");
 
         if(isset($_POST['option_page']) && $_POST['option_page'] == $this->prefix . 'download') {
+            if (!current_user_can('manage_options')) {
+                wp_die(__('You do not have sufficient permissions to access this page.'));
+            }
+            check_admin_referer($this->prefix . 'download-options');
             $version = in_array($_POST['varnish_caching_varnish_version'], array(3,4,5)) ? $_POST['varnish_caching_varnish_version'] : 3;
             $tmpfile = tempnam(sys_get_temp_dir(), "zip");
             $zip = new ZipArchive();
