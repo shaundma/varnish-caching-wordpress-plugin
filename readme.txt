@@ -3,7 +3,7 @@ Donate link: https://www.paypal.me/razvanstanga
 Contributors: razvanstanga
 Tags: varnish, nginx, purge, cache, caching, optimization, performance, traffic
 Requires at least: 4.0
-Tested up to: 5.2
+Tested up to: 6.9.4
 Requires PHP: 5.2.4
 Stable tag: 1.8.4
 License: GPL-3.0-or-later
