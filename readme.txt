@@ -1,11 +1,11 @@
 === Varnish/Nginx Proxy Caching ===
 Donate link: https://www.paypal.me/razvanstanga
-Contributors: razvanstanga
+Contributors: razvanstanga, shaundma, claudeai
 Tags: varnish, nginx, purge, cache, caching, optimization, performance, traffic
 Requires at least: 4.0
 Tested up to: 6.9.4
 Requires PHP: 5.2.4
-Stable tag: 1.8.4
+Stable tag: 1.8.6
 License: GPL-3.0-or-later
 
 Wordpress Varnish Cache 3.x/4.x/5.x and Nginx Proxy Cache integration
@@ -121,6 +121,20 @@ With the current configuration and the way Wordpress works, this can still happe
 * `vcaching_purge_urls` - add additional URLs to purge
 
 == Changelog ==
+
+= 1.8.6 =
+* Security hardening: added esc_attr() on all settings field outputs and post meta values to prevent stored XSS
+* Security hardening: added esc_js() and esc_html() on statistics page output (server IPs, stats JSON URLs)
+* Security hardening: added CSRF nonce verification on console purge form submission
+* Security hardening: sanitize_text_field() on console purge URL and post meta save inputs
+* Security hardening: whitelist allowed tab values instead of using raw $_GET['tab']
+* Security hardening: cast $_GET['post_id'] to integer before use
+* Fixed PHP notice from missing isset() check on $_GET['info']
+
+= 1.8.5 =
+* Security fix: X-VC-* response headers (Enabled, TTL, Cacheable, Debug) are now only sent when debug mode is enabled, preventing sensitive data exposure to unauthenticated visitors (CVE-2025-62126)
+* Security fix: escaped all settings field output with esc_attr() to prevent stored XSS (CVE-2025-48360)
+* Added warning to debug option about exposing internal cache configuration to all visitors
 
 = 1.8.4 =
 * Security fix: added authentication and nonce verification to VCL configuration download (CVE-2025-62126)

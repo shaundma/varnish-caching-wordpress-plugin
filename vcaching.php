@@ -3,7 +3,7 @@
 Plugin Name: Varnish Caching
 Plugin URI: http://wordpress.org/extend/plugins/vcaching/
 Description: WordPress Varnish Cache integration.
-Version: 1.8.4
+Version: 1.8.6
 Author: Razvan Stanga
 Author URI: http://git.razvi.ro/
 License: GPL-3.0-or-later
@@ -131,7 +131,7 @@ class VCaching {
                 'page_row_actions'
             ), 0, 2);
             if (isset($_GET['action']) && isset($_GET['post_id']) && ($_GET['action'] == 'purge_post' || $_GET['action'] == 'purge_page') && check_admin_referer($this->plugin)) {
-                $this->purge_post($_GET['post_id']);
+                $this->purge_post(intval($_GET['post_id']));
                 $this->vcaching_note = $this->noticeMessage;
                 $referer = str_replace('purge_varnish_cache=1', '', wp_get_referer());
                 wp_redirect($referer . (strpos($referer, '?') ? '&' : '?') . 'vcaching_note=' . $_GET['action']);
@@ -150,10 +150,12 @@ class VCaching {
 
         // console purge
         if ($this->check_if_purgeable() && isset($_POST['varnish_caching_purge_url'])) {
-            $this->purge_url(home_url() . $_POST['varnish_caching_purge_url']);
+            check_admin_referer($this->prefix . 'console-options');
+            $this->purge_url(home_url() . sanitize_text_field($_POST['varnish_caching_purge_url']));
             add_action('admin_notices' , array($this, 'purge_message'));
         }
-        $this->currentTab = isset($_GET['tab']) ? $_GET['tab'] : 'options';
+        $allowed_tabs = array('options', 'console', 'stats', 'conf');
+        $this->currentTab = isset($_GET['tab']) && in_array($_GET['tab'], $allowed_tabs) ? $_GET['tab'] : 'options';
     }
 
     public function override_ttl($post)
@@ -233,7 +235,7 @@ class VCaching {
         foreach ($this->customFields as $customField) {
             if (current_user_can($customField['capability'], $post_id)) {
                 if (isset($_POST[$this->prefix . $customField['name']]) && trim($_POST[$this->prefix . $customField['name']]) != '') {
-                    update_post_meta($post_id, $this->prefix . $customField['name'], $_POST[$this->prefix . $customField['name']]);
+                    update_post_meta($post_id, $this->prefix . $customField['name'], sanitize_text_field($_POST[$this->prefix . $customField['name']]));
                 } else {
                     delete_post_meta($post_id, $this->prefix . $customField['name']);
                 }
@@ -279,14 +281,14 @@ class VCaching {
                         // Plain text field
                         echo '<p><strong>' . $customField['title'] . '</strong></p>';
                         $value = get_post_meta($post->ID, $this->prefix . $customField[ 'name' ], true);
-                        echo '<p><input type="text" name="' . $this->prefix . $customField['name'] . '" id="' . $this->prefix . $customField['name'] . '" value="' . $value . '" /></p>';
+                        echo '<p><input type="text" name="' . $this->prefix . $customField['name'] . '" id="' . $this->prefix . $customField['name'] . '" value="' . esc_attr($value) . '" /></p>';
                         break;
                     }
                 }
             } else {
                 echo '<p><strong>' . $customField['title'] . '</strong></p>';
                 $value = get_post_meta($post->ID, $this->prefix . $customField[ 'name' ], true);
-                echo '<p><input type="text" name="' . $this->prefix . $customField['name'] . '" id="' . $this->prefix . $customField['name'] . '" value="' . $value . '" disabled /></p>';
+                echo '<p><input type="text" name="' . $this->prefix . $customField['name'] . '" id="' . $this->prefix . $customField['name'] . '" value="' . esc_attr($value) . '" disabled /></p>';
             }
             $default_ttl = get_option($this->prefix . 'ttl');
             if ($customField['description']) echo '<p>' . sprintf($customField['description'], $default_ttl) . '</p>';
@@ -683,19 +685,19 @@ class VCaching {
     {
         $enable = get_option($this->prefix . 'enable');
         if ($enable) {
-            Header('X-VC-Enabled: true', true);
             if (is_user_logged_in()) {
-                Header('X-VC-Cacheable: NO:User is logged in', true);
                 $ttl = 0;
             } else {
                 $ttl = get_option($this->prefix . 'ttl');
             }
-            Header('X-VC-TTL: ' . $ttl, true);
             if ($this->debug) {
+                Header('X-VC-Enabled: true', true);
+                if (is_user_logged_in()) {
+                    Header('X-VC-Cacheable: NO:User is logged in', true);
+                }
+                Header('X-VC-TTL: ' . $ttl, true);
                 Header('X-VC-Debug: true', true);
             }
-        } else {
-            Header('X-VC-Enabled: false', true);
         }
     }
 
@@ -781,7 +783,7 @@ class VCaching {
             <h2><?= __('Statistics', $this->plugin) ?></h2>
 
             <div class="wrap">
-                <?php if ($_GET['info'] == 1 || trim($this->statsJsons) == ""): ?>
+                <?php if ((isset($_GET['info']) && $_GET['info'] == 1) || trim($this->statsJsons) == ""): ?>
                     <div class="fade">
                         <h4><?=__('Setup information', $this->plugin)?></h4>
                         <?= __('<strong>Short story</strong><br />You must generate by cronjob the JSON stats file. The generated files must be copied on the backend servers in the wordpress root folder.', $this->plugin) ?>
@@ -817,23 +819,23 @@ class VCaching {
                 <?php if(trim($this->statsJsons)): ?>
                     <h2 class="nav-tab-wrapper">
                         <?php foreach ($this->ipsToHosts as $server => $ipToHost): ?>
-                            <a class="server nav-tab <?php if($server == 0) echo "nav-tab-active"; ?>" href="#" server="<?=$server?>"><?= sprintf(__('Server %1$s', $this->plugin), $ipToHost['ip'])?></a>
+                            <a class="server nav-tab <?php if($server == 0) echo "nav-tab-active"; ?>" href="#" server="<?=esc_attr($server)?>"><?= sprintf(__('Server %1$s', $this->plugin), esc_html($ipToHost['ip']))?></a>
                         <?php endforeach; ?>
                     </h2>
 
                     <?php foreach ($this->ipsToHosts as $server => $ipToHost): ?>
-                        <div id="server_<?=$server?>" class="servers" style="display:<?php if($server == 0) {echo 'block';} else {echo 'none';} ?>">
-                            <?= sprintf(__('Fetching stats for server %1$s', $this->plugin), $ipToHost['ip']) ?>
+                        <div id="server_<?=esc_attr($server)?>" class="servers" style="display:<?php if($server == 0) {echo 'block';} else {echo 'none';} ?>">
+                            <?= sprintf(__('Fetching stats for server %1$s', $this->plugin), esc_html($ipToHost['ip'])) ?>
                         </div>
                         <script type="text/javascript">
-                            jQuery.getJSON("<?=$ipToHost['statsJson']?>", function(data) {
-                                var server = '#server_<?=$server?>';
+                            jQuery.getJSON("<?=esc_js($ipToHost['statsJson'])?>", function(data) {
+                                var server = '#server_<?=esc_js($server)?>';
                                 jQuery(server).html('');
-                                jQuery(server).append('<p><?= __('Stats generated on', $this->plugin) ?> ' + data.timestamp + '</p>');
-                                jQuery(server).append('<table class="wp-list-table widefat fixed striped server_<?=$server?>"><thead><tr><td class="manage-column"><strong><?= __('Description', $this->plugin) ?></strong></td><td class="manage-column"><strong><?= __('Value', $this->plugin) ?></strong></td><td class="manage-column"><strong><?= __('Key', $this->plugin) ?></strong></td></tr></thead><tbody id="varnishstats_<?=$server?>"></tbody></table>');
+                                jQuery(server).append('<p><?= esc_js(__('Stats generated on', $this->plugin)) ?> ' + data.timestamp + '</p>');
+                                jQuery(server).append('<table class="wp-list-table widefat fixed striped server_<?=esc_js($server)?>"><thead><tr><td class="manage-column"><strong><?= esc_js(__('Description', $this->plugin)) ?></strong></td><td class="manage-column"><strong><?= esc_js(__('Value', $this->plugin)) ?></strong></td><td class="manage-column"><strong><?= esc_js(__('Key', $this->plugin)) ?></strong></td></tr></thead><tbody id="varnishstats_<?=esc_js($server)?>"></tbody></table>');
                                 delete data.timestamp;
                                 jQuery.each(data, function(key, val) {
-                                    jQuery('#varnishstats_<?=$server?>').append('<tr><td>'+val.description+'</td><td>'+val.value+'</td><td>'+key+'</td></tr>');
+                                    jQuery('#varnishstats_<?=esc_js($server)?>').append('<tr><td>'+val.description+'</td><td>'+val.value+'</td><td>'+key+'</td></tr>');
                                 });
                             });
                         </script>
@@ -928,7 +930,7 @@ class VCaching {
     public function varnish_caching_homepage_ttl()
     {
         ?>
-            <input type="text" name="varnish_caching_homepage_ttl" id="varnish_caching_homepage_ttl" value="<?php echo get_option($this->prefix . 'homepage_ttl'); ?>" />
+            <input type="text" name="varnish_caching_homepage_ttl" id="varnish_caching_homepage_ttl" value="<?php echo esc_attr(get_option($this->prefix . 'homepage_ttl')); ?>" />
             <p class="description"><?=__('Time to live in seconds in Varnish cache for homepage', $this->plugin)?></p>
         <?php
     }
@@ -936,7 +938,7 @@ class VCaching {
     public function varnish_caching_ttl()
     {
         ?>
-            <input type="text" name="varnish_caching_ttl" id="varnish_caching_ttl" value="<?php echo get_option($this->prefix . 'ttl'); ?>" />
+            <input type="text" name="varnish_caching_ttl" id="varnish_caching_ttl" value="<?php echo esc_attr(get_option($this->prefix . 'ttl')); ?>" />
             <p class="description"><?=__('Time to live in seconds in Varnish cache', $this->plugin)?></p>
         <?php
     }
@@ -944,7 +946,7 @@ class VCaching {
     public function varnish_caching_ips()
     {
         ?>
-            <input type="text" name="varnish_caching_ips" id="varnish_caching_ips" size="100" value="<?php echo get_option($this->prefix . 'ips'); ?>" />
+            <input type="text" name="varnish_caching_ips" id="varnish_caching_ips" size="100" value="<?php echo esc_attr(get_option($this->prefix . 'ips')); ?>" />
             <p class="description"><?=__('Comma separated ip/ip:port. Example : 192.168.0.2,192.168.0.3:8080', $this->plugin)?></p>
         <?php
     }
@@ -962,7 +964,7 @@ class VCaching {
     public function varnish_caching_hosts()
     {
         ?>
-            <input type="text" name="varnish_caching_hosts" id="varnish_caching_hosts" size="100" value="<?php echo get_option($this->prefix . 'hosts'); ?>" />
+            <input type="text" name="varnish_caching_hosts" id="varnish_caching_hosts" size="100" value="<?php echo esc_attr(get_option($this->prefix . 'hosts')); ?>" />
             <p class="description">
                 <?=__('Comma separated hostnames. Varnish uses the hostname to create the cache hash. For each IP, you must set a hostname.<br />Use this option if you use multiple domains.', $this->plugin)?>
             </p>
@@ -980,7 +982,7 @@ class VCaching {
     public function varnish_caching_purge_key()
     {
         ?>
-            <input type="text" name="varnish_caching_purge_key" id="varnish_caching_purge_key" size="100" maxlength="64" value="<?php echo get_option($this->prefix . 'purge_key'); ?>" />
+            <input type="text" name="varnish_caching_purge_key" id="varnish_caching_purge_key" size="100" maxlength="64" value="<?php echo esc_attr(get_option($this->prefix . 'purge_key')); ?>" />
             <span onclick="generateHash(64, 0, 'varnish_caching_purge_key'); return false;" class="dashicons dashicons-image-rotate" title="<?=__('Generate')?>"></span>
             <p class="description">
                 <?=__('Key used to purge Varnish cache. It is sent to Varnish as X-VC-Purge-Key header. Use a SHA-256 hash.<br />If you can\'t use ACL\'s, use this option. You can set the `purge key` in lib/purge.vcl.<br />Search the default value ff93c3cb929cee86901c7eefc8088e9511c005492c6502a930360c02221cf8f4 to find where to replace it.', $this->plugin)?>
@@ -991,7 +993,7 @@ class VCaching {
     public function varnish_caching_cookie()
     {
         ?>
-            <input type="text" name="varnish_caching_cookie" id="varnish_caching_cookie" size="100" maxlength="64" value="<?php echo get_option($this->prefix . 'cookie'); ?>" />
+            <input type="text" name="varnish_caching_cookie" id="varnish_caching_cookie" size="100" maxlength="64" value="<?php echo esc_attr(get_option($this->prefix . 'cookie')); ?>" />
             <span onclick="generateHash(64, 0, 'varnish_caching_cookie'); return false;" class="dashicons dashicons-image-rotate" title="<?=__('Generate')?>"></span>
             <p class="description">
                 <?=__('This module sets a special cookie to tell Varnish that the user is logged in. Use a SHA-256 hash. You can set the `logged in cookie` in default.vcl.<br />Search the default value <i>flxn34napje9kwbwr4bjwz5miiv9dhgj87dct4ep0x3arr7ldif73ovpxcgm88vs</i> to find where to replace it.', $this->plugin)?>
@@ -1002,7 +1004,7 @@ class VCaching {
     public function varnish_caching_stats_json_file()
     {
         ?>
-            <input type="text" name="varnish_caching_stats_json_file" id="varnish_caching_stats_json_file" size="100" value="<?php echo get_option($this->prefix . 'stats_json_file'); ?>" />
+            <input type="text" name="varnish_caching_stats_json_file" id="varnish_caching_stats_json_file" size="100" value="<?php echo esc_attr(get_option($this->prefix . 'stats_json_file')); ?>" />
             <p class="description">
                 <?=sprintf(__('Comma separated relative URLs. One for each IP. <a href="%1$s/wp-admin/index.php?page=vcaching-plugin&tab=stats&info=1">Click here</a> for more info on how to set this up.', $this->plugin), home_url())?>
             </p>
@@ -1045,6 +1047,7 @@ class VCaching {
             <input type="checkbox" name="varnish_caching_debug" value="1" <?php checked(1, get_option($this->prefix . 'debug'), true); ?> />
             <p class="description">
                 <?=__('Send all debugging headers to the client. Also shows complete response from Varnish on purge all.', $this->plugin)?>
+                <br /><strong style="color:#d63638"><?=__('Warning: When enabled, internal cache configuration (TTL, cache status, enabled state) is exposed to all visitors via HTTP response headers. Disable after debugging.', $this->plugin)?></strong>
             </p>
         <?php
     }
@@ -1141,7 +1144,7 @@ class VCaching {
     public function varnish_caching_varnish_backends()
     {
         ?>
-            <input type="text" name="varnish_caching_varnish_backends" id="varnish_caching_varnish_backends" size="100" value="<?php echo get_option($this->prefix . 'varnish_backends'); ?>" />
+            <input type="text" name="varnish_caching_varnish_backends" id="varnish_caching_varnish_backends" size="100" value="<?php echo esc_attr(get_option($this->prefix . 'varnish_backends')); ?>" />
             <p class="description"><?=__('Comma separated ip/ip:port. Example : 192.168.0.2,192.168.0.3:8080', $this->plugin)?></p>
         <?php
     }
@@ -1149,7 +1152,7 @@ class VCaching {
     public function varnish_caching_varnish_acls()
     {
         ?>
-            <input type="text" name="varnish_caching_varnish_acls" id="varnish_caching_varnish_acls" size="100" value="<?php echo get_option($this->prefix . 'varnish_acls'); ?>" />
+            <input type="text" name="varnish_caching_varnish_acls" id="varnish_caching_varnish_acls" size="100" value="<?php echo esc_attr(get_option($this->prefix . 'varnish_acls')); ?>" />
             <p class="description"><?=__('Comma separated ip/ip range. Example : 192.168.0.2,192.168.1.1/24', $this->plugin)?></p>
         <?php
     }
