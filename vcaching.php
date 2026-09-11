@@ -113,6 +113,13 @@ class VCaching {
     {
         foreach ($this->fileConfig as $key => $value) {
             $option_name = $this->prefix . $key;
+            // Special-case: for varnish_backends/varnish_acls, a value of
+            // 'localhost' is resolved at runtime to the actual FQDN of the
+            // machine the plugin is running on. Lets one config file be
+            // deployed unchanged across a fleet of origin hosts.
+            if (($key === 'varnish_backends' || $key === 'varnish_acls') && $value === 'localhost') {
+                $value = $this->resolve_local_hostname();
+            }
             $override = function () use ($value) { return $value; };
             add_filter('pre_option_'         . $option_name, $override);
             add_filter('option_'             . $option_name, $override);
@@ -121,6 +128,21 @@ class VCaching {
             add_filter('site_option_'        . $option_name, $override);
             add_filter('default_site_option_'. $option_name, $override);
         }
+    }
+
+    /**
+     * Return the local server's FQDN. Prefers `hostname -f` (via shell_exec)
+     * since gethostname() on many Linux distros returns only the short name.
+     * Falls back to gethostname(), and finally to the literal 'localhost'.
+     */
+    protected function resolve_local_hostname()
+    {
+        if (function_exists('shell_exec')) {
+            $fqdn = trim((string) @shell_exec('hostname -f 2>/dev/null'));
+            if ($fqdn !== '') return $fqdn;
+        }
+        $h = gethostname();
+        return $h ?: 'localhost';
     }
 
     public function init()

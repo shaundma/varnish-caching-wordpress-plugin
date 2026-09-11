@@ -126,6 +126,7 @@ With the current configuration and the way Wordpress works, this can still happe
 * New: multisite friendliness - a single vcaching-config.php file applies network-wide to every subsite; no need to configure each subsite individually. Existing per-subsite DB configurations continue to work when no config file is present.
 * New: DNS-hostname expansion in the IP list. A single entry like "cache.example.com" is resolved at plugin load time to all matching A records, so purges automatically fan out to every node behind the hostname. Literal IPv4/IPv6 addresses continue to work unchanged. When DNS resolution fails at load time the hostname is kept and wp_remote_request retries the lookup at purge time.
 * Backward compatible with 1.8.x: standard single-site installs with existing DB options behave exactly as before.
+* New: for `varnish_backends` and `varnish_acls` in the settings file, the value `'localhost'` is resolved at runtime to the current server's FQDN (via `hostname -f`, falling back to gethostname). One vcaching-config.php can be deployed unchanged across a fleet of origin hosts.
 
 = 1.8.6 =
 * Security hardening: added esc_attr() on all settings field outputs and post meta values to prevent stored XSS

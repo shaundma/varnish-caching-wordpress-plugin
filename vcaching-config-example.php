@@ -56,6 +56,10 @@ return array(
 
     'stats_json_file' => '',
 
-    'varnish_backends' => '',
-    'varnish_acls'     => '',
+    // Origin backend + ACL host used by the VCL Generator tab. The special
+    // value 'localhost' resolves at runtime to the current server's FQDN
+    // (via `hostname -f`), so one config file can be deployed unchanged
+    // across a fleet of origin hosts.
+    'varnish_backends' => 'localhost',
+    'varnish_acls'     => 'localhost',
 );
