@@ -1,5 +1,4 @@
 === Varnish/Nginx Proxy Caching ===
-Donate link: https://www.paypal.me/razvanstanga
 Contributors: razvanstanga, shaundma, claudeai
 Tags: varnish, nginx, purge, cache, caching, optimization, performance, traffic
 Requires at least: 4.0
