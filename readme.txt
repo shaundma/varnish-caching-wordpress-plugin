@@ -5,7 +5,7 @@ Tags: varnish, nginx, purge, cache, caching, optimization, performance, traffic
 Requires at least: 4.0
 Tested up to: 6.9.4
 Requires PHP: 5.2.4
-Stable tag: 1.8.6
+Stable tag: 1.9.0
 License: GPL-3.0-or-later
 
 Wordpress Varnish Cache 3.x/4.x/5.x and Nginx Proxy Cache integration
@@ -121,6 +121,12 @@ With the current configuration and the way Wordpress works, this can still happe
 * `vcaching_purge_urls` - add additional URLs to purge
 
 == Changelog ==
+
+= 1.9.0 =
+* New: single optional settings file at wp-content/plugins/varnish-caching/vcaching-config.php (sitting next to the main plugin file). Returns an associative array of overrides for any plugin option. When present, values in that file win over the wp_options table entries; keys that are not set in the file continue to read from the DB. Missing file = pure DB behavior, identical to 1.8.x. See vcaching-config-example.php in the plugin directory for the full list of supported keys and usage notes.
+* New: multisite friendliness - a single vcaching-config.php file applies network-wide to every subsite; no need to configure each subsite individually. Existing per-subsite DB configurations continue to work when no config file is present.
+* New: DNS-hostname expansion in the IP list. A single entry like "cache.example.com" is resolved at plugin load time to all matching A records, so purges automatically fan out to every node behind the hostname. Literal IPv4/IPv6 addresses continue to work unchanged. When DNS resolution fails at load time the hostname is kept and wp_remote_request retries the lookup at purge time.
+* Backward compatible with 1.8.x: standard single-site installs with existing DB options behave exactly as before.
 
 = 1.8.6 =
 * Security hardening: added esc_attr() on all settings field outputs and post meta values to prevent stored XSS

@@ -3,7 +3,7 @@
 Plugin Name: Varnish Caching
 Plugin URI: http://wordpress.org/extend/plugins/vcaching/
 Description: WordPress Varnish Cache integration.
-Version: 1.8.6
+Version: 1.9.0
 Author: Razvan Stanga
 Author URI: http://git.razvi.ro/
 License: GPL-3.0-or-later
@@ -11,6 +11,14 @@ Text Domain: vcaching
 Network: true
 
 Copyright 2019: Razvan Stanga (email: varnish-caching@razvi.ro)
+v1.9.0 additions (2026): single optional settings file at
+wp-content/plugins/varnish-caching/vcaching-config.php (sitting
+next to the main plugin file) returning an associative array of
+overrides for any plugin option, and DNS-hostname expansion in
+the IP list so a single entry like 'cache.example.com' resolves
+to all matching A records at load time. Missing file = pure DB
+behavior, identical to 1.8.x. Works the same on single-site and
+multisite (one file, network-wide).
 */
 
 class VCaching {
@@ -39,12 +47,26 @@ class VCaching {
     protected $useSsl = false;
     protected $vcaching_note = '';
 
+    /**
+     * v1.9: settings loaded from wp-content/vcaching-config.php (if present).
+     * Any key present in that file's returned array wins over the DB value
+     * for the corresponding wp_option. Empty array = pure DB behavior (1.8.x compatible).
+     */
+    protected $fileConfig = array();
+    protected $fileConfigPath = null;
+
     public function __construct()
     {
         global $blog_id;
         defined($this->plugin) || define($this->plugin, true);
 
         $this->blogId = $blog_id;
+
+        // v1.9: single settings file - one place, auto-loaded, no scattered constants.
+        // Same file works for single-site AND multisite (applies network-wide).
+        $this->load_file_config();
+        $this->register_file_config_overrides();
+
         add_action('init', array(&$this, 'init'), 11);
         add_action('activity_box_end', array($this, 'varnish_glance'), 100);
 
@@ -52,6 +74,53 @@ class VCaching {
         add_action('vcaching_purge_all', function (){
             $this->purge_url(home_url() .'/?vc-regex');
         });
+    }
+
+    /**
+     * Load the settings file at wp-content/plugins/varnish-caching/vcaching-config.php
+     * (i.e. sitting next to this main plugin file). That file must return an
+     * associative array whose keys match the plugin option keys (without the
+     * varnish_caching_ prefix). Missing file = zero effect, DB options continue
+     * to be used exactly as in 1.8.x.
+     */
+    protected function load_file_config()
+    {
+        $file = __DIR__ . '/vcaching-config.php';
+        if (@is_file($file) && @is_readable($file)) {
+            $data = include $file;
+            if (is_array($data)) {
+                $this->fileConfig = $data;
+                $this->fileConfigPath = $file;
+            }
+        }
+    }
+
+    /**
+     * For every key in the loaded file config, register the three WordPress
+     * option-filter variants that between them cover all cases:
+     *   - pre_option_<name>   : short-circuits before the DB is read
+     *   - option_<name>       : runs after a DB read (option exists in wp_options)
+     *   - default_option_<name>: runs when the option is MISSING from wp_options
+     *     (this is what a fresh install hits, and it is why a single 'option_'
+     *      filter registration is not enough - the DB-miss path never invokes
+     *      the 'option_' filter, only 'default_option_'.)
+     * Same three variants for the site_option flavours so multisite works
+     * network-wide with the same file.
+     * Runs only for keys the file actually sets, so unset keys continue to
+     * read from the DB.
+     */
+    protected function register_file_config_overrides()
+    {
+        foreach ($this->fileConfig as $key => $value) {
+            $option_name = $this->prefix . $key;
+            $override = function () use ($value) { return $value; };
+            add_filter('pre_option_'         . $option_name, $override);
+            add_filter('option_'             . $option_name, $override);
+            add_filter('default_option_'     . $option_name, $override);
+            add_filter('pre_site_option_'    . $option_name, $override);
+            add_filter('site_option_'        . $option_name, $override);
+            add_filter('default_site_option_'. $option_name, $override);
+        }
     }
 
     public function init()
@@ -201,16 +270,59 @@ class VCaching {
         $this->dynamicHost = get_option($this->prefix . 'dynamic_host');
         $this->statsJsons = get_option($this->prefix . 'stats_json_file');
         $this->purgeOnMenuSave = get_option($this->prefix . 'purge_menu_save');
-        $varnishIp = explode(',', $this->varnishIp);
-        $varnishIp = apply_filters('vcaching_varnish_ips', $varnishIp);
-        $varnishHost = explode(',', $this->varnishHost);
+
+        $varnishIp   = array_map('trim', explode(',', (string)$this->varnishIp));
+        $varnishHost = array_map('trim', explode(',', (string)$this->varnishHost));
+        $statsJsons  = array_map('trim', explode(',', (string)$this->statsJsons));
+
+        // v1.9: expand any non-IP entry in the IPs list via DNS A-record lookup so
+        // a single entry like 'cache.example.com' becomes all matching node IPs.
+        // Literal IPv4/IPv6 entries pass through unchanged (fully backward-compatible
+        // with 1.8.x configurations). Per-index host and statsJson mappings are
+        // duplicated across each expanded IP so position-matching stays intact.
+        $expandedIp = array();
+        $expandedHost = array();
+        $expandedStats = array();
+        foreach ($varnishIp as $key => $ip) {
+            if ($ip === '') continue;
+            $host  = isset($varnishHost[$key]) ? $varnishHost[$key] : '';
+            $stats = isset($statsJsons[$key])  ? $statsJsons[$key]  : '';
+            if (filter_var($ip, FILTER_VALIDATE_IP)) {
+                $expandedIp[]    = $ip;
+                $expandedHost[]  = $host;
+                $expandedStats[] = $stats;
+                continue;
+            }
+            $records = @dns_get_record($ip, DNS_A);
+            if ($records) {
+                foreach ($records as $r) {
+                    if (empty($r['ip'])) continue;
+                    $expandedIp[]    = $r['ip'];
+                    $expandedHost[]  = $host;
+                    $expandedStats[] = $stats;
+                }
+            } else {
+                // DNS resolution failed at this moment - keep the hostname so
+                // wp_remote_request can retry the lookup at purge-time.
+                $expandedIp[]    = $ip;
+                $expandedHost[]  = $host;
+                $expandedStats[] = $stats;
+            }
+        }
+        $varnishIp   = $expandedIp;
+        $varnishHost = $expandedHost;
+        $statsJsons  = $expandedStats;
+
+        $varnishIp   = apply_filters('vcaching_varnish_ips',   $varnishIp);
         $varnishHost = apply_filters('vcaching_varnish_hosts', $varnishHost);
-        $statsJsons = explode(',', $this->statsJsons);
+
         foreach ($varnishIp as $key => $ip) {
             $this->ipsToHosts[] = array(
-                'ip' => $ip,
-                'host' => $this->dynamicHost ? (isset($_SERVER['HTTP_HOST']) ? $_SERVER['HTTP_HOST'] : '') : $varnishHost[$key],
-                'statsJson' => isset($statsJsons[$key]) ? $statsJsons[$key] : null
+                'ip'        => $ip,
+                'host'      => $this->dynamicHost
+                    ? (isset($_SERVER['HTTP_HOST']) ? $_SERVER['HTTP_HOST'] : '')
+                    : (isset($varnishHost[$key]) ? $varnishHost[$key] : ''),
+                'statsJson' => isset($statsJsons[$key]) ? $statsJsons[$key] : null,
             );
         }
     }

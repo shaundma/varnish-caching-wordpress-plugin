@@ -1,1 +1,4 @@
 /vcaching-svn
+
+# Do not commit site-specific settings
+vcaching-config.php
