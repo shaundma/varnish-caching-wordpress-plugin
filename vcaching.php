@@ -3,7 +3,7 @@
 Plugin Name: Varnish Caching
 Plugin URI: http://wordpress.org/extend/plugins/vcaching/
 Description: WordPress Varnish Cache integration.
-Version: 1.9.0
+Version: 1.9.1
 Author: Razvan Stanga
 Author URI: http://git.razvi.ro/
 License: GPL-3.0-or-later
@@ -11,14 +11,18 @@ Text Domain: vcaching
 Network: true
 
 Copyright 2019: Razvan Stanga (email: varnish-caching@razvi.ro)
-v1.9.0 additions (2026): single optional settings file at
-wp-content/plugins/varnish-caching/vcaching-config.php (sitting
-next to the main plugin file) returning an associative array of
-overrides for any plugin option, and DNS-hostname expansion in
-the IP list so a single entry like 'cache.example.com' resolves
-to all matching A records at load time. Missing file = pure DB
-behavior, identical to 1.8.x. Works the same on single-site and
-multisite (one file, network-wide).
+v1.9 additions (2026): optional settings loaded from any of three
+locations (first found wins) as an associative array of overrides
+for any plugin option:
+  1. $GLOBALS['vcaching_config'] set from wp-config.php (recommended)
+  2. WP_CONTENT_DIR/vcaching-config.php
+  3. <plugin dir>/vcaching-config.php (wiped by plugin updates)
+Plus DNS-hostname expansion in the IPs list so a single entry like
+'cache.example.com' resolves to all matching A records at plugin
+load, and a 'localhost' shortcut for varnish_backends/varnish_acls
+that resolves to the current machine's FQDN.
+None of the sources present = pure DB behavior, identical to
+1.8.x. Same on single-site and multisite (one config, network-wide).
 */
 
 class VCaching {
@@ -77,14 +81,49 @@ class VCaching {
     }
 
     /**
-     * Load the settings file at wp-content/plugins/varnish-caching/vcaching-config.php
-     * (i.e. sitting next to this main plugin file). That file must return an
-     * associative array whose keys match the plugin option keys (without the
-     * varnish_caching_ prefix). Missing file = zero effect, DB options continue
-     * to be used exactly as in 1.8.x.
+     * Load the settings, checking three optional locations in priority order:
+     *
+     *   1. `$GLOBALS['vcaching_config']` set from wp-config.php. Recommended
+     *      for production: survives plugin updates, single file to edit
+     *      (the one every WordPress admin already knows).
+     *   2. `WP_CONTENT_DIR/vcaching-config.php` - a file in wp-content/. Also
+     *      survives plugin updates, useful when wp-config.php edits are
+     *      inconvenient.
+     *   3. `__DIR__/vcaching-config.php` - sitting next to this plugin file.
+     *      Convenient for local development but WIPED by every plugin update
+     *      (WordPress deletes the plugin directory before extracting a new
+     *      version), so avoid for production use.
+     *
+     * Whichever is found first wins; the others are ignored. All three are
+     * optional. None present = plugin behaves exactly as in 1.8.x, reading
+     * from the wp_options table as configured through the settings page.
+     *
+     * In every case the source is an associative array whose keys match the
+     * plugin option keys (without the varnish_caching_ prefix).
      */
     protected function load_file_config()
     {
+        // 1. wp-config.php paste block: $vcaching_config = array(...);
+        if (isset($GLOBALS['vcaching_config']) && is_array($GLOBALS['vcaching_config'])) {
+            $this->fileConfig = $GLOBALS['vcaching_config'];
+            $this->fileConfigPath = 'wp-config.php ($vcaching_config)';
+            return;
+        }
+
+        // 2. wp-content/vcaching-config.php
+        if (defined('WP_CONTENT_DIR')) {
+            $file = WP_CONTENT_DIR . '/vcaching-config.php';
+            if (@is_file($file) && @is_readable($file)) {
+                $data = include $file;
+                if (is_array($data)) {
+                    $this->fileConfig = $data;
+                    $this->fileConfigPath = $file;
+                    return;
+                }
+            }
+        }
+
+        // 3. Plugin dir vcaching-config.php (wiped by plugin updates - dev only)
         $file = __DIR__ . '/vcaching-config.php';
         if (@is_file($file) && @is_readable($file)) {
             $data = include $file;

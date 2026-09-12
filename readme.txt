@@ -4,7 +4,7 @@ Tags: varnish, nginx, purge, cache, caching, optimization, performance, traffic
 Requires at least: 4.0
 Tested up to: 7.1
 Requires PHP: 5.2.4
-Stable tag: 1.9.0
+Stable tag: 1.9.1
 License: GPL-3.0-or-later
 
 Wordpress Varnish Cache 3.x/4.x/5.x and Nginx Proxy Cache integration
@@ -120,6 +120,9 @@ With the current configuration and the way Wordpress works, this can still happe
 * `vcaching_purge_urls` - add additional URLs to purge
 
 == Changelog ==
+
+= 1.9.1 =
+* New: settings can now also be provided as `$vcaching_config = array(...)` in wp-config.php, or as `wp-content/vcaching-config.php`. Whichever source is present first wins. Both survive plugin updates (the previous plugin-directory location gets wiped when WordPress replaces the plugin folder). See vcaching-config-example.php for the full precedence order and paste block.
 
 = 1.9.0 =
 * New: single optional settings file at wp-content/plugins/varnish-caching/vcaching-config.php (sitting next to the main plugin file). Returns an associative array of overrides for any plugin option. When present, values in that file win over the wp_options table entries; keys that are not set in the file continue to read from the DB. Missing file = pure DB behavior, identical to 1.8.x. See vcaching-config-example.php in the plugin directory for the full list of supported keys and usage notes.

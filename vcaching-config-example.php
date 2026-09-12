@@ -1,20 +1,35 @@
 <?php
 /**
- * Varnish Caching plugin - optional single settings file.
+ * Varnish Caching plugin - optional settings.
  *
- * Copy this file to vcaching-config.php in the SAME directory
- * (wp-content/plugins/varnish-caching/) and edit the values below.
- * The plugin auto-loads vcaching-config.php at construction time -
- * no wp-config.php edits, no separate defines, no other locations
- * searched.
+ * The plugin loads settings from the FIRST of these three locations
+ * (whichever is present); the others are ignored:
  *
- * Any key returned here overrides the matching option in the WP
- * database. Any key NOT returned here (or missing file entirely)
- * falls back to whatever is stored via the settings page. Empty
- * file / empty array = pure DB behavior, identical to 1.8.x.
+ *   1. `$GLOBALS['vcaching_config']` set from wp-config.php.
+ *      RECOMMENDED for production. Survives plugin updates, single
+ *      file to maintain (the one every WordPress admin already knows).
  *
- * Works on single-site AND on WordPress multisite. On multisite,
- * this ONE file applies to every subsite in the network.
+ *      Paste block, above the "That's all, stop editing!" line:
+ *
+ *        // Varnish Caching plugin config
+ *        $vcaching_config = array(
+ *            'enable' => 1,
+ *            'ips'    => 'cache.example.com',
+ *            'ttl'    => 3600,
+ *            // ... any of the supported keys below ...
+ *        );
+ *
+ *   2. `wp-content/vcaching-config.php`. Survives plugin updates
+ *      like option 1, but requires SFTP access rather than wp-config
+ *      editing. Must return an associative array (like this example
+ *      file does).
+ *
+ *   3. `wp-content/plugins/varnish-caching/vcaching-config.php`
+ *      (i.e. this file's location if you rename it to drop the
+ *      `-example` suffix). WIPED by every plugin update because
+ *      WordPress deletes the plugin directory before extracting a
+ *      new version. Convenient for local development, avoid for
+ *      production.
  *
  * All values below are placeholders. Fill in what you need; delete
  * any key you would rather manage through the settings page.
@@ -58,8 +73,8 @@ return array(
 
     // Origin backend + ACL host used by the VCL Generator tab. The special
     // value 'localhost' resolves at runtime to the current server's FQDN
-    // (via `hostname -f`), so one config file can be deployed unchanged
-    // across a fleet of origin hosts.
+    // (via `hostname -f`), so one config can be deployed unchanged across
+    // a fleet of origin hosts.
     'varnish_backends' => 'localhost',
     'varnish_acls'     => 'localhost',
 );
