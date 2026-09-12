@@ -4,7 +4,7 @@ Tags: varnish, nginx, purge, cache, caching, optimization, performance, traffic
 Requires at least: 4.0
 Tested up to: 7.1
 Requires PHP: 5.2.4
-Stable tag: 1.9.1
+Stable tag: 1.9.2
 License: GPL-3.0-or-later
 
 Wordpress Varnish Cache 3.x/4.x/5.x and Nginx Proxy Cache integration
@@ -120,6 +120,9 @@ With the current configuration and the way Wordpress works, this can still happe
 * `vcaching_purge_urls` - add additional URLs to purge
 
 == Changelog ==
+
+= 1.9.2 =
+* Fix: on WordPress multisite (especially with domain-mapped subsites) the plugin's logged-in bypass cookie was not being cleared on logout because wp_logout only cleared it for the current site's domain, while wp_login had set it on whichever subsite domain the user authenticated from. As a result, users who logged out and kept browsing continued to bypass varnish cache. wp_logout now iterates every site in the network via get_sites() and sends a Set-Cookie delete for each of their domains (up to 500).
 
 = 1.9.1 =
 * New: settings can now also be provided as `$vcaching_config = array(...)` in wp-config.php, or as `wp-content/vcaching-config.php`. Whichever source is present first wins. Both survive plugin updates (the previous plugin-directory location gets wiped when WordPress replaces the plugin folder). See vcaching-config-example.php for the full precedence order and paste block.

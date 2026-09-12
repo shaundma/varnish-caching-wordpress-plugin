@@ -3,7 +3,7 @@
 Plugin Name: Varnish Caching
 Plugin URI: http://wordpress.org/extend/plugins/vcaching/
 Description: WordPress Varnish Cache integration.
-Version: 1.9.1
+Version: 1.9.2
 Author: Razvan Stanga
 Author URI: http://git.razvi.ro/
 License: GPL-3.0-or-later
@@ -885,8 +885,29 @@ class VCaching {
     public function wp_logout()
     {
         $cookie = get_option($this->prefix . 'cookie');
-        if (!empty($cookie)) {
-            setcookie($cookie, null, time()-3600*24*100, COOKIEPATH, COOKIE_DOMAIN, false, true);
+        if (empty($cookie)) return;
+
+        $expires = time() - 3600 * 24 * 100;
+
+        // Clear for the current site's cookie domain (works for single-site and
+        // for the site the user is currently on in multisite).
+        setcookie($cookie, null, $expires, COOKIEPATH, COOKIE_DOMAIN, false, true);
+
+        // Multisite: wp_login may have set the cookie on a different subsite's
+        // domain than where wp_logout fires (common with domain-mapped MU),
+        // so also send a delete for every known network site domain. Ensures
+        // the cookie is actually removed regardless of which subsite the user
+        // authenticated on. Cap at 500 sites to keep the response header small
+        // on very large networks.
+        if (is_multisite() && function_exists('get_sites')) {
+            $sites = get_sites(array('number' => 500));
+            $seen = array(COOKIE_DOMAIN => true);
+            foreach ($sites as $site) {
+                $domain = isset($site->domain) ? $site->domain : '';
+                if ($domain === '' || isset($seen[$domain])) continue;
+                setcookie($cookie, null, $expires, '/', $domain, false, true);
+                $seen[$domain] = true;
+            }
         }
     }
 
