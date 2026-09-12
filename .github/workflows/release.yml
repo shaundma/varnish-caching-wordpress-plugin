@@ -1,0 +1,48 @@
+name: Package release zip
+
+# Fires when a Release is published in the Github UI (or via `gh release create`).
+# Builds a clean plugin zip whose inner directory is exactly `varnish-caching/`
+# (regardless of what the repo or branch is called), then attaches it to the
+# Release as `varnish-caching.zip` so users can install directly via
+# WordPress -> Plugins -> Add New -> Upload Plugin.
+#
+# Stable download URL of the latest release asset:
+#   https://github.com/<owner>/<repo>/releases/latest/download/varnish-caching.zip
+
+on:
+  release:
+    types: [published]
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Build clean plugin zip with correct inner directory name
+        run: |
+          set -euo pipefail
+          BUILD_DIR="$(mktemp -d)"
+          rsync -a \
+            --exclude='.git' \
+            --exclude='.gitignore' \
+            --exclude='.gitattributes' \
+            --exclude='.github' \
+            --exclude='vcaching-config.php' \
+            --exclude='vcaching-svn' \
+            --exclude='node_modules' \
+            --exclude='vendor' \
+            ./ "$BUILD_DIR/varnish-caching/"
+          ( cd "$BUILD_DIR" && zip -r varnish-caching.zip varnish-caching )
+          echo "ARTIFACT=$BUILD_DIR/varnish-caching.zip" >> "$GITHUB_ENV"
+
+      - name: List zip contents for logs
+        run: unzip -l "$ARTIFACT" | head -50
+
+      - name: Attach zip to the release
+        uses: softprops/action-gh-release@v2
+        with:
+          files: ${{ env.ARTIFACT }}
