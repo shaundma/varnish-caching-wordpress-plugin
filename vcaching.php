@@ -864,7 +864,7 @@ class VCaching {
     public function add_menu_item()
     {
         if ($this->check_if_purgeable()) {
-            add_menu_page(__('Varnish Caching', $this->plugin), __('Varnish Caching', $this->plugin), 'manage_options', $this->plugin . '-plugin', array($this, 'settings_page'), plugins_url() . '/' . $this->plugin . '/icon.png', 99);
+            add_menu_page(__('Varnish Caching', $this->plugin), __('Varnish Caching', $this->plugin), 'manage_options', $this->plugin . '-plugin', array($this, 'settings_page'), plugins_url('icon.png', __FILE__), 99);
         }
     }
 
